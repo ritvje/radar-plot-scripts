@@ -157,7 +157,7 @@ def plot_volume_tasks(files, path, outpath=".", quantities=["DBZH", "VRAD"], rma
         weight="bold",
     )
     fig.supxlabel("Distance from radar (km)", y=0.08, weight="bold")
-    fig.supylabel("Distance from radar (km)", x=0.15, weight="bold")
+    fig.supylabel("Distance from radar (km)", x=0.08, weight="bold")
 
     # Some adjusting to make plot a bit tighter, adjust as needed
     fig.subplots_adjust(wspace=0, hspace=0.2)
