@@ -11,6 +11,12 @@ from pathlib import Path
 
 import utils
 
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
 
 def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png"):
     cbar_ax_kws = {
@@ -42,19 +48,6 @@ def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png"):
         elif isinstance(norm, mpl.colors.BoundaryNorm):
             cbar_ticks = norm.boundaries
 
-        display.plot(
-            utils.PYART_FIELDS[qty],
-            0,
-            title="",
-            # vmin=qty_ranges[qty][0], vmax=qty_ranges[qty][1],
-            ax=ax,
-            axislabels_flag=False,
-            colorbar_flag=False,
-            cmap=cmap,
-            norm=norm,
-            zorder=10,
-        )
-
         cbar = plt.colorbar(
             mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
             format=mpl.ticker.StrMethodFormatter(utils.QTY_FORMATS[qty]),
@@ -67,9 +60,25 @@ def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png"):
 
         if qty == "HCLASS":
             utils.set_HCLASS_cbar(cbar)
-        # display.plot_colorbar(
-        #     mappable=mpl.cm.ScalarMappable(norm=norm, cmap=cmap), field=None, label=colorbar_titles[qty],
-        #     orient='vertical', cax=cax, ax=None, fig=fig, ticks=None, ticklabs=None)
+
+            # Set 0-values as nan to prevent them from being plotted with same color as 1
+            radar.fields["radar_echo_classification"]["data"].set_fill_value(np.nan)
+
+            radar.fields["radar_echo_classification"]["data"] = np.ma.masked_values(
+                radar.fields["radar_echo_classification"]["data"], 0
+            )
+
+        display.plot(
+            utils.PYART_FIELDS[qty],
+            0,
+            title="",
+            ax=ax,
+            axislabels_flag=False,
+            colorbar_flag=False,
+            cmap=cmap,
+            norm=norm,
+            zorder=10,
+        )
 
         for r in [20, 40, 60, 80, 250]:
             display.plot_range_ring(r, ax=ax, lw=0.5, col="k")

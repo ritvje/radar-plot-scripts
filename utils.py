@@ -1,7 +1,9 @@
 """Utility functions."""
+import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 import numpy as np
 import pyart
+from pyart.io.sigmet import SigmetFile
 import pandas as pd
 from datetime import datetime
 import re
@@ -174,11 +176,13 @@ def get_colormap(quantity):
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
         cmap = cm.get_cmap("pyart_HomeyerRainbow", len(bounds))
     elif quantity == "TH":
-        cmap = "pyart_NWSRef"
-        norm = None
+        bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 1, 5)
+        norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
+        cmap = cm.get_cmap("pyart_HomeyerRainbow", len(bounds))
     elif "SNR" in quantity or "LOG" in quantity:
-        cmap = "pyart_Carbone17"
-        norm = None
+        bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 1, 5)
+        norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
+        cmap = cm.get_cmap("pyart_HomeyerRainbow", len(bounds))
     elif quantity == "KDP":
         cmap = "pyart_Theodore16"
         norm = None
@@ -228,8 +232,13 @@ def set_HCLASS_cbar(cbar):
         "6 Hail",
     ]
     values = np.arange(1, 7)
-    cbar.ax.set_yticks(values)
-    cbar.ax.set_yticklabels(labels, rotation="vertical", va="center")
+    cbar.set_ticks(values, labels)
+    cbar.set_ticklabels(labels)
+    plt.setp(
+        cbar.ax.get_yticklabels(),
+        rotation="vertical",
+        va="center",
+    )
 
 
 def get_sigmet_file_list_by_task(
@@ -301,3 +310,32 @@ def parse_time_from_filename(fn, pattern, timepattern, group_idx=0):
         return datetime.strptime(match.groups()[group_idx], timepattern)
     else:
         return None
+
+
+def add_estimated_SNR(fn, radar):
+    sigmet_file = SigmetFile(fn)
+
+    # Get reflectivity calibration value
+    NEZ = (
+        sigmet_file.ingest_header["task_configuration"]["task_calib_info"][
+            "reflectivity_calibration"
+        ]
+        / 16
+    )
+    # Ranges in the same shape as data
+    R = np.tile(radar.range["data"], (radar.nrays, 1)) * 1e-3
+    # Estimated SNR
+    SNR = radar.fields["reflectivity"]["data"] - NEZ - 20 * np.log10(R)
+
+    field = {
+        "units": "dB",
+        "standard_name": "signal_to_noise_ratio",
+        "long_name": "Signal to noise ratio",
+        "coordinates": "elevation azimuth range",
+        "data": SNR,
+    }
+
+    # Add a field
+    radar.add_field("signal_to_noise_ratio", field)
+
+    sigmet_file.close()

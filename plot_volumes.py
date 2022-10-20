@@ -14,11 +14,14 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 import pyart
+
 import utils
+
 import warnings
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 def plot_volume_tasks(files, path, outpath=".", quantities=["DBZH", "VRAD"], rmax=100):
@@ -57,8 +60,10 @@ def plot_volume_tasks(files, path, outpath=".", quantities=["DBZH", "VRAD"], rma
     for row, fn in enumerate(sorted(files)):
         radar = pyart.io.read_sigmet(
             os.path.join(path, fn),
-            include_fields=[utils.PYART_FIELDS[q] for q in quantities],
         )
+
+        if "SNR" in quantities and "signal_to_noise_ratio" not in radar.fields.keys():
+            utils.add_estimated_SNR(os.path.join(path, fn), radar)
 
         dtime = datetime.strptime(
             radar.time["units"], "seconds since %Y-%m-%dT%H:%M:%SZ"
@@ -88,6 +93,26 @@ def plot_volume_tasks(files, path, outpath=".", quantities=["DBZH", "VRAD"], rma
             elif isinstance(norm, mpl.colors.BoundaryNorm):
                 cbar_ticks = norm.boundaries
 
+            cbar = plt.colorbar(
+                mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
+                format=mpl.ticker.StrMethodFormatter(utils.QTY_FORMATS[qty]),
+                orientation="vertical",
+                cax=cax,
+                ax=None,
+                ticks=cbar_ticks,
+            )
+            cbar.set_label(label=utils.COLORBAR_TITLES[qty], weight="bold")
+
+            if qty == "HCLASS":
+                utils.set_HCLASS_cbar(cbar)
+
+                # Set 0-values as nan to prevent them from being plotted with same color as 1
+                radar.fields["radar_echo_classification"]["data"].set_fill_value(np.nan)
+
+                radar.fields["radar_echo_classification"]["data"] = np.ma.masked_values(
+                    radar.fields["radar_echo_classification"]["data"], 0
+                )
+
             # Plot the radar image
             display.plot(
                 utils.PYART_FIELDS[qty],
@@ -102,17 +127,6 @@ def plot_volume_tasks(files, path, outpath=".", quantities=["DBZH", "VRAD"], rma
                 norm=norm,
                 zorder=10,
             )
-
-            # Add colorbar to axis we created before
-            cbar = plt.colorbar(
-                mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
-                format=mpl.ticker.StrMethodFormatter(utils.QTY_FORMATS[qty]),
-                orientation="vertical",
-                cax=cax,
-                ax=None,
-                ticks=cbar_ticks,
-            )
-            cbar.set_label(label=utils.COLORBAR_TITLES[qty], weight="bold")
 
             # Add some range rings, add more to the list as you wish
             display.plot_range_rings(
@@ -139,11 +153,11 @@ def plot_volume_tasks(files, path, outpath=".", quantities=["DBZH", "VRAD"], rma
     # title = display.generate_title(field="reflectivity", sweep=0).split("\n")[0]
     fig.suptitle(
         f"{min_time:%Y/%m/%d %H:%M} - {max_time:%Y/%m/%d %H:%M} UTC",
-        y=0.89,
+        y=0.91,
         weight="bold",
     )
-    fig.supxlabel("Distance from radar (km)", y=0.1, weight="bold")
-    fig.supylabel("Distance from radar (km)", x=0.1, weight="bold")
+    fig.supxlabel("Distance from radar (km)", y=0.08, weight="bold")
+    fig.supylabel("Distance from radar (km)", x=0.15, weight="bold")
 
     # Some adjusting to make plot a bit tighter, adjust as needed
     fig.subplots_adjust(wspace=0, hspace=0.2)
@@ -190,6 +204,21 @@ if __name__ == "__main__":
     )
     argparser.add_argument(
         "--rmax", type=int, default=100, help="Maximum range in kilometers"
+    )
+    argparser.add_argument(
+        "--qtys",
+        type=str,
+        nargs="+",
+        default=[
+            "DBZH",
+            "VRAD",
+            "WRAD",
+            "ZDR",
+            "PHIDP",
+            "RHOHV",
+            "SNR",
+        ],
+        help="Quantities to be plotted, in ODIM short names.",
     )
     args = argparser.parse_args()
     logging.basicConfig(level=logging.INFO)
@@ -244,15 +273,7 @@ if __name__ == "__main__":
     plot_args = dict(
         path=args.inpath,
         outpath=args.outpath,
-        quantities=[
-            "DBZH",
-            "VRAD",
-            "WRAD",
-            "ZDR",
-            "PHIDP",
-            "RHOHV",
-            "SNR",
-        ],
+        quantities=args.qtys,
         rmax=args.rmax,
     )
 
