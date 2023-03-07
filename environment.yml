@@ -1,0 +1,25 @@
+name: radar
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - numpy
+  - arm_pyart
+  - scipy
+  - dask
+  - cartopy
+  - wradlib
+  - pyproj
+  - rasterio
+  - cmcrameri
+  - ca-certificates
+  - certifi
+  - openssl
+  - ipdb
+  - pandas
+  - h5py
+  - matplotlib
+  - proplot
+  - pip:
+    - LovelyPlots
+

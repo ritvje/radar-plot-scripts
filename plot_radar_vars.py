@@ -1,3 +1,9 @@
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
 import logging
 import argparse
 import pyart
@@ -11,14 +17,39 @@ from pathlib import Path
 
 import utils
 
-import warnings
 
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-warnings.filterwarnings("ignore", category=RuntimeWarning)
+def get_radar_coords(lon, lat, radar):
+    return pyart.core.geographic_to_cartesian_aeqd(
+        lon, lat, radar.longitude["data"].item(), radar.latitude["data"].item()
+    )
 
 
-def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png"):
+def plot_fourpanel_fig(
+    radar,
+    qtys,
+    max_dist=100,
+    outdir=Path("."),
+    ext="png",
+    markers=None,
+):
+    """Plot a figure of 4 radar variables.
+
+    Parameters
+    ----------
+    radar : pyart.core.Radar
+        The radar object.
+    qtys : list of str
+        List of radar variables to plot.
+    max_dist : int, optional
+        Maximum distance to plot, by default 100
+    outdir : pathlib.Path , optional
+        Output path, by default Path(".")
+    ext : str, optional
+        Figure filename extension, by default "png"
+    markers : list, optional
+        List of marker tuples as (lon, lat, marker_color, marker_symbol), by default None
+
+    """
     cbar_ax_kws = {
         "width": "5%",  # width = 5% of parent_bbox width
         "height": "100%",
@@ -33,13 +64,25 @@ def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png"):
     display = pyart.graph.RadarDisplay(radar)
     time = datetime.strptime(radar.time["units"], "seconds since %Y-%m-%dT%H:%M:%SZ")
     fmt = mpl.ticker.StrMethodFormatter("{x:.0f}")
+
+    if markers is not None:
+        markers = [
+            (*get_radar_coords(float(m[0]), float(m[1]), radar), m[2], m[3])
+            for m in markers
+        ]
+
     for ax, qty in zip(axes.flat, qtys):
         cax = inset_axes(ax, bbox_transform=ax.transAxes, **cbar_ax_kws)
 
+        if "VRAD" in qty:
+            utils.QTY_RANGES[qty] = (
+                -1 * np.ceil(radar.get_nyquist_vel(0)),
+                np.ceil(radar.get_nyquist_vel(0)),
+            )
+
         cmap, norm = utils.get_colormap(qty)
-        # if norm is None:
-        #     norm = mpl.colors.Normalize(vmin=qty_ranges[qty][0], vmax=qty_ranges[qty][1])
         cbar_ticks = None
+
         if norm is None:
             # define the bins and normalize
             bounds = np.linspace(utils.QTY_RANGES[qty][0], utils.QTY_RANGES[qty][1], 40)
@@ -80,7 +123,18 @@ def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png"):
             zorder=10,
         )
 
-        for r in [20, 40, 60, 80, 250]:
+        if markers is not None:
+            for marker in markers:
+                ax.plot(
+                    marker[0] / 1000,
+                    marker[1] / 1000,
+                    marker=marker[3],
+                    markerfacecolor="none",
+                    markeredgecolor=marker[2],
+                    zorder=20,
+                )
+
+        for r in [25, 50, 75, 100, 125, 150, 175, 200, 225, 250]:
             display.plot_range_ring(r, ax=ax, lw=0.5, col="k")
         # display.plot_grid_lines(ax=ax, col="grey", ls=":")
         ax.set_title(utils.TITLES[qty], y=-0.12)
@@ -102,7 +156,6 @@ def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png"):
         ax.set_aspect(1)
         ax.grid(zorder=15, linestyle="-", linewidth=0.4)
 
-    # title = display.generate_title(field="reflectivity", sweep=0).split("\n")[0]
     fig.suptitle(
         f"{time:%Y/%m/%d %H:%M} UTC {radar.fixed_angle['data'][0]:.1f}°", y=0.02
     )
@@ -112,7 +165,6 @@ def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png"):
         f"{time:%Y%m%d%H%M%S}_{radar.fixed_angle['data'][0]:.1f}.{ext}"
     )
 
-    # fig.subplots_adjust(wspace=0, hspace=0.2)
     fig.savefig(
         fname,
         dpi=600,
@@ -120,7 +172,6 @@ def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png"):
         transparent=False,
         facecolor="white",
     )
-    # fig.savefig(f"radar_vars_{time:%Y%m%d%H%M}_{radar.fixed_angle['data'][0]:.1f}.png", dpi=600, bbox_inches="tight")
 
 
 if __name__ == "__main__":
@@ -140,6 +191,13 @@ if __name__ == "__main__":
             "ZDR",
         ],
         help="Quantities (4) to be plotted, in ODIM short names.",
+    )
+    argparser.add_argument(
+        "--markers",
+        type=str,
+        nargs="+",
+        default=[],
+        help="marker locations as lon,lat,color,marker",
     )
     argparser.add_argument(
         "--rmax", type=int, default=100, help="Maximum range in kilometers"
@@ -164,6 +222,17 @@ if __name__ == "__main__":
 
     infile = Path(args.inpath).resolve()
 
-    radar = pyart.io.read_sigmet(infile)
+    radar = pyart.io.read(infile)
 
-    plot_fourpanel_fig(radar, args.qtys, max_dist=args.rmax, outdir=outdir)
+    markers = None
+    if len(args.markers):
+        markers = [m.split(",") for m in args.markers]
+
+    plot_fourpanel_fig(
+        radar,
+        args.qtys,
+        max_dist=args.rmax,
+        outdir=outdir,
+        markers=markers,
+        ext=args.ext,
+    )

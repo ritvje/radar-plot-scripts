@@ -14,20 +14,25 @@ alias_names = {
     "VRAD": [
         "velocity",
         "radial_wind_speed",
+        "corrected_velocity",
+        "VRADDH",
     ],
     "DBZH": [
         "reflectivity",
+        "DBZHC",
     ],
     "wind_shear": [
         "radial_shear",
         "azimuthal_shear",
     ],
     "total_shear": ["total_shear_thr", "tdwr_gfda_shear"],
+    "ZDR": ["corrected_differential_reflectivity", "ZDRC"],
 }
 
 
 PYART_FIELDS = {
     "DBZH": "reflectivity",
+    "DBZHC": "corrected_reflectivity",
     "HCLASS": "radar_echo_classification",
     "KDP": "specific_differential_phase",
     "PHIDP": "differential_phase",
@@ -35,14 +40,17 @@ PYART_FIELDS = {
     "SQI": "normalized_coherent_power",
     "TH": "total_power",
     "VRAD": "velocity",
+    "VRADDH": "corrected_velocity",
     "WRAD": "spectrum_width",
     "ZDR": "differential_reflectivity",
+    "ZDRC": "corrected_differential_reflectivity",
     "SNR": "signal_to_noise_ratio",
     "LOG": "log_signal_to_noise_ratio",
 }
 
 PYART_FIELDS_ODIM = {
     "DBZH": "reflectivity_horizontal",
+    "DBZHC": "corrected_reflectivity",
     "HCLASS": "radar_echo_classification",
     "KDP": "specific_differential_phase",
     "PHIDP": "differential_phase",
@@ -92,11 +100,11 @@ QTY_RANGES = {
     "RHOHV": (0.8, 1.0),
     "SQI": (0.0, 1.0),
     "TH": (-15.0, 60.0),
-    "VRAD": (-30.0, 30.0),
+    "VRAD": (-40.0, 40.0),
     "VRADH": (-30.0, 30.0),
     # "radial_wind_speed": (-30.0, 30.0),
     "WRAD": (0.0, 5.0),
-    "ZDR": (-4, 8.0),
+    "ZDR": (-4, 5.0),
     "SNR": (-30.0, 50.0),
     "LOG": (0.0, 50.0),
     "cnr": (-30, 0),
@@ -134,6 +142,7 @@ COLORBAR_TITLES = {
 
 TITLES = {
     "DBZH": r"$Z_{e}$",
+    "DBZHC": r"Corrected $Z_{e}$",
     "VRAD": r"$v$",
     "RHOHV": r"$\rho{HV}$",
     "ZDR": r"$Z_{DR}$",
@@ -144,7 +153,7 @@ TITLES = {
     "HCLASS": "HydroClass",
     "KDP": r"$K_{DP}$",
     "SQI": "SQI",
-    "TH": r"Z_{t}",
+    "TH": r"$Z_{t}$",
     "LOG": "LOG",
     "cnr": "CNR",
     "wind_shear": "Wind shear",
@@ -154,10 +163,14 @@ TITLES = {
 
 for name, alias_list in alias_names.items():
     for a in alias_list:
-        COLORBAR_TITLES[a] = COLORBAR_TITLES[name]
-        QTY_RANGES[a] = QTY_RANGES[name]
-        QTY_FORMATS[a] = QTY_FORMATS[name]
-        TITLES[a] = TITLES[name]
+        if a not in COLORBAR_TITLES.keys():
+            COLORBAR_TITLES[a] = COLORBAR_TITLES[name]
+        if a not in QTY_RANGES.keys():
+            QTY_RANGES[a] = QTY_RANGES[name]
+        if a not in QTY_FORMATS.keys():
+            QTY_FORMATS[a] = QTY_FORMATS[name]
+        if a not in TITLES.keys():
+            TITLES[a] = TITLES[name]
 
 
 def get_colormap(quantity):
@@ -197,10 +210,15 @@ def get_colormap(quantity):
         cmap = "pyart_NWS_SPW"
         norm = None
     elif quantity == "ZDR":
-        cmap = "pyart_RefDiff"
-        norm = None
+        bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.1, 0.5)
+        norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
+        cmap = cm.get_cmap("pyart_LangRainbow12", len(bounds))
     elif quantity == "cnr":
         bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.1, 1.0)
+        norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
+        cmap = cm.get_cmap("viridis", len(bounds))
+    elif quantity == "SQI":
+        bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.1, 0.05)
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
         cmap = cm.get_cmap("viridis", len(bounds))
     elif "wind_shear" in quantity or quantity in alias_names["wind_shear"]:
