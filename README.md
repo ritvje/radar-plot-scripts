@@ -33,8 +33,10 @@ python plot_volume_rhis.py <path-to-dir> <output-dir> --volume_time 15 --task_re
 ## Plot single PPIs with 4 quantities
 
 ```bash
-python plot_radar_rhi.py <path-to-raw-file> --out <out-directory> --qtys <ODIM-names-for-4-quantities> --rmax <max-distance-plotted> -hmax <max-height-in-km> --ext <pdf-or-png>
+python plot_radar_vars.py <path-to-raw-file> --out <out-directory> --qtys <ODIM-names-for-4-quantities> --rmax <max-distance-plotted> -hmax <max-height-in-km> --ext <pdf-or-png>
 ```
+
+The script also allows plotting markers in the PPIS by specifying the `--markers` option. The markers are specified as a list of `lon,lat,marker_color,marker_type` values. The marker color and type should match available matplotlib options.
 
 For example:
 
