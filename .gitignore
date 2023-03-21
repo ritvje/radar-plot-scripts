@@ -1,7 +1,9 @@
 # Data & image file formats
-*.pdf
-*.raw
-*.png
+**/*.pdf
+**/*.raw
+**/*.RAW*
+**/*.png
+**/*.gif
 **/__pycache__/*
 *.csv
 *.code-workspace
@@ -10,6 +12,7 @@
 *.out
 *.json
 **/*.pyc
+**/*.zip
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

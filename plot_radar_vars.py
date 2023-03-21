@@ -24,13 +24,15 @@ def get_radar_coords(lon, lat, radar):
     )
 
 
-def plot_fourpanel_fig(
+def plot_ppi_fig(
     radar,
     qtys,
+    ncols=2,
     max_dist=100,
     outdir=Path("."),
     ext="png",
     markers=None,
+    title_prefix="",
 ):
     """Plot a figure of 4 radar variables.
 
@@ -40,6 +42,8 @@ def plot_fourpanel_fig(
         The radar object.
     qtys : list of str
         List of radar variables to plot.
+    ncols : int, optional
+        Number of columns, by default 2
     max_dist : int, optional
         Maximum distance to plot, by default 100
     outdir : pathlib.Path , optional
@@ -48,6 +52,8 @@ def plot_fourpanel_fig(
         Figure filename extension, by default "png"
     markers : list, optional
         List of marker tuples as (lon, lat, marker_color, marker_symbol), by default None
+    title_prefix : str, optional
+        Prefix to add to the figure title, by default ""
 
     """
     cbar_ax_kws = {
@@ -58,8 +64,16 @@ def plot_fourpanel_fig(
         "borderpad": 0,
     }
 
+    n_qtys = len(qtys)
+    nrows = np.ceil(n_qtys / ncols).astype(int)
+
     fig, axes = plt.subplots(
-        nrows=2, ncols=2, figsize=(12, 10), sharex="col", sharey="row"
+        nrows=nrows,
+        ncols=ncols,
+        figsize=(6 * ncols, 5 * nrows),
+        sharex="col",
+        sharey="row",
+        constrained_layout=True,
     )
     display = pyart.graph.RadarDisplay(radar)
     time = datetime.strptime(radar.time["units"], "seconds since %Y-%m-%dT%H:%M:%SZ")
@@ -137,7 +151,7 @@ def plot_fourpanel_fig(
         for r in [25, 50, 75, 100, 125, 150, 175, 200, 225, 250]:
             display.plot_range_ring(r, ax=ax, lw=0.5, col="k")
         # display.plot_grid_lines(ax=ax, col="grey", ls=":")
-        ax.set_title(utils.TITLES[qty], y=-0.12)
+        ax.set_title(utils.TITLES[qty], y=-0.08)
 
     # x-axis
     for ax in axes[1][:].flat:
@@ -156,8 +170,13 @@ def plot_fourpanel_fig(
         ax.set_aspect(1)
         ax.grid(zorder=15, linestyle="-", linewidth=0.4)
 
+    # Remove empty axes
+    for ax in axes.flat[n_qtys:]:
+        ax.remove()
+
     fig.suptitle(
-        f"{time:%Y/%m/%d %H:%M} UTC {radar.fixed_angle['data'][0]:.1f}°", y=0.02
+        f"{title_prefix}{time:%Y/%m/%d %H:%M} UTC {radar.fixed_angle['data'][0]:.1f}°",
+        y=1.02,
     )
 
     fname = outdir / (
@@ -190,7 +209,7 @@ if __name__ == "__main__":
             "RHOHV",
             "ZDR",
         ],
-        help="Quantities (4) to be plotted, in ODIM short names.",
+        help="Quantities to be plotted, in ODIM short names.",
     )
     argparser.add_argument(
         "--markers",
@@ -201,6 +220,9 @@ if __name__ == "__main__":
     )
     argparser.add_argument(
         "--rmax", type=int, default=100, help="Maximum range in kilometers"
+    )
+    argparser.add_argument(
+        "--ncols", type=int, default=2, help="Number of columns in the figure"
     )
     argparser.add_argument(
         "--ext",
@@ -214,9 +236,6 @@ if __name__ == "__main__":
     plt.style.use("presentation.mplstyle")
     pyart.load_config(os.environ.get("PYART_CONFIG"))
 
-    if len(args.qtys) != 4:
-        raise ValueError("Wrong number of quantities, 4 expected!")
-
     outdir = Path(args.out)
     outdir.mkdir(parents=True, exist_ok=True)
 
@@ -228,11 +247,13 @@ if __name__ == "__main__":
     if len(args.markers):
         markers = [m.split(",") for m in args.markers]
 
-    plot_fourpanel_fig(
+    plot_ppi_fig(
         radar,
         args.qtys,
+        ncols=args.ncols,
         max_dist=args.rmax,
         outdir=outdir,
         markers=markers,
         ext=args.ext,
+        title_prefix=f"{radar.metadata['instrument_name'].decode().capitalize()} ",
     )

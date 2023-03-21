@@ -1,14 +1,16 @@
 """Utility functions."""
-import matplotlib.pyplot as plt
-from matplotlib import cm, colors
-import numpy as np
-import pyart
-from pyart.io.sigmet import SigmetFile
-import pandas as pd
-from datetime import datetime
-import re
 import os
+import re
+import struct
+from datetime import datetime
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pyart
 from cmcrameri import cm as cm_crameri
+from matplotlib import cm, colors
+from pyart.io.sigmet import SigmetFile
 
 alias_names = {
     "VRAD": [
@@ -46,6 +48,8 @@ PYART_FIELDS = {
     "ZDRC": "corrected_differential_reflectivity",
     "SNR": "signal_to_noise_ratio",
     "LOG": "log_signal_to_noise_ratio",
+    "PMI": "polarimetric_meteo_index",
+    "CSP": "clutter_power_ratio",
 }
 
 PYART_FIELDS_ODIM = {
@@ -63,6 +67,8 @@ PYART_FIELDS_ODIM = {
     "ZDR": "differential_reflectivity",
     "SNR": "signal_to_noise_ratio",
     "LOG": "log_signal_to_noise_ratio",
+    "PMI": "polarimetric_meteo_index",
+    "CSP": "clutter_power_ratio",
 }
 
 
@@ -78,7 +84,7 @@ QTY_FORMATS = {
     "KDP": "{x:.1f}",
     "HCLASS": "{x:1.0f}",
     "PHIDP": "{x:.2f}",
-    "SQI": "{x:.1f}",
+    "SQI": "{x:.2f}",
     "TH": "{x:.0f}",
     "WRAD": "{x:.1f}",
     "LOG": "{x:.0f}",
@@ -89,6 +95,9 @@ QTY_FORMATS = {
     "total_shear": "{x:.0f}",
     # "total_shear_thr": "{x:.0f}",
     "tdwr_gfda": "{x:.0f}",
+    "PMI": "{x:.2f}",
+    "CSP": "{x:.0f}",
+    "LOG": "{x:.0f}",
 }
 
 
@@ -113,6 +122,9 @@ QTY_RANGES = {
     "total_shear": (0, 15),
     # "total_shear_thr": (0, 20),
     "tdwr_gfda": (-1, 1),
+    "PMI": (0, 1),
+    "CSP": (-20, 50),
+    "LOG": (-20, 50),
 }
 
 COLORBAR_TITLES = {
@@ -138,6 +150,9 @@ COLORBAR_TITLES = {
     "total_shear": "Total wind shear [m s$^{-1}$ km$^{-1}$]",
     # "total_shear_thr": "",
     "tdwr_gfda": "TWDR gust front segments",
+    "PMI": "Polarimetric meteo index",
+    "CSP": "Clutter power ratio of dBT to -dBZ [dB]",
+    "LOG": "Log receiver signal-to-noise ratio [dB]",
 }
 
 TITLES = {
@@ -147,7 +162,7 @@ TITLES = {
     "RHOHV": r"$\rho{HV}$",
     "ZDR": r"$Z_{DR}$",
     "PMI": r"PMI",
-    "WRAD": r"(d) $\sigma_v$",
+    "WRAD": r"$\sigma_v$",
     "PHIDP": r"$\Phi_{DP}$",
     "SNR": r"SNR",
     "HCLASS": "HydroClass",
@@ -159,6 +174,9 @@ TITLES = {
     "wind_shear": "Wind shear",
     "total_shear": "Wind shear",
     "tdwr_gfda": "Wind shear",
+    "PMI": "PMI",
+    "CSP": "CSP",
+    "LOG": "LOG",
 }
 
 for name, alias_list in alias_names.items():
@@ -184,7 +202,7 @@ def get_colormap(quantity):
         # cmap = cm_crameri.roma
         cmap = "cmc.roma_r"
         norm = None
-    elif "DBZH" in quantity or quantity in alias_names["DBZH"]:
+    elif quantity in ["DBZH", *alias_names["DBZH"]]:
         bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 1, 5)
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
         cmap = cm.get_cmap("pyart_HomeyerRainbow", len(bounds))
@@ -192,7 +210,7 @@ def get_colormap(quantity):
         bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 1, 5)
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
         cmap = cm.get_cmap("pyart_HomeyerRainbow", len(bounds))
-    elif "SNR" in quantity or "LOG" in quantity:
+    elif quantity in ["SNR", "LOG", "CSP"]:
         bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 1, 5)
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
         cmap = cm.get_cmap("pyart_HomeyerRainbow", len(bounds))
@@ -217,14 +235,22 @@ def get_colormap(quantity):
         bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.1, 1.0)
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
         cmap = cm.get_cmap("viridis", len(bounds))
-    elif quantity == "SQI":
-        bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.1, 0.05)
+    elif quantity == "PMI":
+        bounds = np.arange(
+            QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.01, 0.05
+        )
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
-        cmap = cm.get_cmap("viridis", len(bounds))
-    elif "wind_shear" in quantity or quantity in alias_names["wind_shear"]:
+        cmap = cm.get_cmap("cmc.hawaii", len(bounds))
+    elif quantity == "SQI":
+        bounds = np.arange(
+            QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.01, 0.05
+        )
+        norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
+        cmap = cm.get_cmap("cmc.hawaii", len(bounds))
+    elif quantity in ["wind_shear", *alias_names["wind_shear"]]:
         cmap = "cmc.roma_r"
         norm = None
-    elif "total_shear" == quantity or quantity in alias_names["total_shear"]:
+    elif quantity in ["total_shear", *alias_names["total_shear"]]:
         cmap = "cmc.hawaii_r"
         norm = None
     elif "total_shear_thr" in quantity:

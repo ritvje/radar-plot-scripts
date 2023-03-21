@@ -11,6 +11,11 @@ from pathlib import Path
 
 import utils
 
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 
 def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png", hmax=10):
     cbar_ax_kws = {
