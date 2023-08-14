@@ -30,10 +30,10 @@ For example, plotting FMI RHIs
 python plot_volume_rhis.py <path-to-dir> <output-dir> --volume_time 15 --task_regex "([A-Z\-_]*)(RHI)([A-Z\-_]*)" --file_regex "([0-9]{12})_([A-Z0-9.\-_]+).raw" --rmax 250 --hmax 25 --datetime_format "%Y%m%d%H%M" --n_workers 1
 ```
 
-## Plot single PPIs with 4 quantities
+## Plot single PPIs with specified quantities
 
 ```bash
-python plot_radar_vars.py <path-to-raw-file> --out <out-directory> --qtys <ODIM-names-for-4-quantities> --rmax <max-distance-plotted> -hmax <max-height-in-km> --ext <pdf-or-png>
+python plot_radar_vars.py <path-to-raw-file> --out <out-directory> --qtys <ODIM-names-for-quantities> --rmax <max-distance-plotted> --range-rings <sep-in-km> --ext <pdf-or-png>
 ```
 
 The script also allows plotting markers in the PPIS by specifying the `--markers` option. The markers are specified as a list of `lon,lat,marker_color,marker_type` values. The marker color and type should match available matplotlib options.
@@ -44,10 +44,10 @@ For example:
 python plot_radar_vars.py <infile> --rmax 20 --qtys DBZH VRAD RHOHV ZDR --ext png
 ```
 
-## Plot single RHIs with 4 quantities
+## Plot single RHIs with specified quantities
 
 ```bash
-python plot_radar_rhi.py <path-to-raw-file> --out <out-directory> --qtys <ODIM-names-for-4-quantities> --rmax <max-distance-plotted> --ext <pdf-or-png> --hmax <max-height-in-km>
+python plot_radar_rhi.py <path-to-raw-file> --out <out-directory> --qtys <ODIM-names-for-quantities> --rmax <max-distance-plotted> --ext <pdf-or-png> --hmax <max-height-in-km>
 ```
 
 For example:

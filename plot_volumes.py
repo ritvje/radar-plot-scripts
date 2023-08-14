@@ -24,7 +24,9 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
-def plot_volume_tasks(files, path, outpath=".", quantities=["DBZH", "VRAD"], rmax=100):
+def plot_volume_tasks(
+    files, path, outpath=".", quantities=["DBZH", "VRAD"], rmax=100, range_rings_sep=50
+):
 
     SMALL_SIZE = 4
     BIGGER_SIZE = 8
@@ -80,9 +82,17 @@ def plot_volume_tasks(files, path, outpath=".", quantities=["DBZH", "VRAD"], rma
         for ax, qty in zip(axes[row, :].flat, quantities):
             # Create inset axis for colorbar
             cax = inset_axes(ax, bbox_transform=ax.transAxes, **cbar_ax_kws)
+
+            if "VRAD" in qty:
+                utils.QTY_RANGES[qty] = (
+                    -1 * np.ceil(radar.get_nyquist_vel(0)),
+                    np.ceil(radar.get_nyquist_vel(0)),
+                )
+
             # Get norm and colormap for the quantity
             cmap, norm = utils.get_colormap(qty)
             cbar_ticks = None
+
             if norm is None:
                 # define the bins and normalize
                 bounds = np.linspace(
@@ -101,7 +111,7 @@ def plot_volume_tasks(files, path, outpath=".", quantities=["DBZH", "VRAD"], rma
                 ax=None,
                 ticks=cbar_ticks,
             )
-            cbar.set_label(label=utils.COLORBAR_TITLES[qty], weight="bold")
+            cbar.set_label(label=utils.COLORBAR_TITLES[qty])
 
             if qty == "HCLASS":
                 utils.set_HCLASS_cbar(cbar)
@@ -130,10 +140,12 @@ def plot_volume_tasks(files, path, outpath=".", quantities=["DBZH", "VRAD"], rma
 
             # Add some range rings, add more to the list as you wish
             display.plot_range_rings(
-                [50, 100, 150, 200, 250], ax=ax, lw=0.2, col="gray"
+                np.arange(range_rings_sep, rmax, range_rings_sep),
+                ax=ax,
+                lw=0.2,
+                col="gray",
             )
             # Could also add grid lines
-            # display.plot_grid_lines(ax=ax, col="grey", ls=":")
             ax.set_title(
                 f"{qty} {radar.fixed_angle['data'][0]:.1f} deg", y=1.01, weight="bold"
             )
@@ -275,6 +287,7 @@ if __name__ == "__main__":
         outpath=args.outpath,
         quantities=args.qtys,
         rmax=args.rmax,
+        range_rings_sep=args.range_rings,
     )
 
     if args.n_workers == 1:

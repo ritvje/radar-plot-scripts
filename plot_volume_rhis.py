@@ -26,7 +26,12 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 def plot_volume_tasks(
-    files, path, outpath=".", quantities=["DBZH", "VRAD"], rmax=100, hmax=10
+    files,
+    path,
+    outpath=".",
+    quantities=["DBZH", "VRAD"],
+    rmax=100,
+    hmax=10,
 ):
 
     SMALL_SIZE = 4
@@ -82,17 +87,18 @@ def plot_volume_tasks(
         for ax, qty in zip(axes[row, :].flat, quantities):
             # Create inset axis for colorbar
             cax = inset_axes(ax, bbox_transform=ax.transAxes, **cbar_ax_kws)
+
+            if "VRAD" in qty:
+                utils.QTY_RANGES[qty] = (
+                    -1 * np.ceil(radar.get_nyquist_vel(0)),
+                    np.ceil(radar.get_nyquist_vel(0)),
+                )
+
             # Get norm and colormap for the quantity
             cmap, norm = utils.get_colormap(qty)
             cbar_ticks = None
-            if qty == "VRAD":
-                # Get the colormap limits from Nyquist velocity
-                vmax = np.ceil(radar.get_nyquist_vel(0))
-                # define the bins and normalize
-                bounds = np.linspace((-1) * vmax, vmax, 40)
-                norm = mpl.colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
-                cmap = plt.get_cmap(cmap, len(bounds))
-            elif norm is None:
+
+            if norm is None:
                 # define the bins and normalize
                 bounds = np.linspace(
                     utils.QTY_RANGES[qty][0], utils.QTY_RANGES[qty][1], 40
@@ -101,6 +107,27 @@ def plot_volume_tasks(
                 cmap = plt.get_cmap(cmap, len(bounds))
             elif isinstance(norm, mpl.colors.BoundaryNorm):
                 cbar_ticks = norm.boundaries
+
+            # Add colorbar to axis we created before
+            cbar = plt.colorbar(
+                mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
+                format=mpl.ticker.StrMethodFormatter(utils.QTY_FORMATS[qty]),
+                orientation="vertical",
+                cax=cax,
+                ax=None,
+                ticks=cbar_ticks,
+            )
+            cbar.set_label(label=utils.COLORBAR_TITLES[qty])
+
+            if qty == "HCLASS":
+                utils.set_HCLASS_cbar(cbar)
+
+                # Set 0-values as nan to prevent them from being plotted with same color as 1
+                radar.fields["radar_echo_classification"]["data"].set_fill_value(np.nan)
+
+                radar.fields["radar_echo_classification"]["data"] = np.ma.masked_values(
+                    radar.fields["radar_echo_classification"]["data"], 0
+                )
 
             # Plot the radar image
             try:
@@ -119,20 +146,6 @@ def plot_volume_tasks(
                 )
             except KeyError:
                 pass
-
-            # Add colorbar to axis we created before
-            cbar = plt.colorbar(
-                mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
-                format=mpl.ticker.StrMethodFormatter(utils.QTY_FORMATS[qty]),
-                orientation="vertical",
-                cax=cax,
-                ax=None,
-                ticks=cbar_ticks,
-            )
-            cbar.set_label(label=utils.COLORBAR_TITLES[qty], weight="bold")
-
-            if qty == "HCLASS":
-                utils.set_HCLASS_cbar(cbar)
 
             # Add some range rings, add more to the list as you wish
             # display.plot_range_rings(

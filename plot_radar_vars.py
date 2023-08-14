@@ -29,6 +29,7 @@ def plot_ppi_fig(
     qtys,
     ncols=2,
     max_dist=100,
+    range_rings_sep=25,
     outdir=Path("."),
     ext="png",
     markers=None,
@@ -46,6 +47,8 @@ def plot_ppi_fig(
         Number of columns, by default 2
     max_dist : int, optional
         Maximum distance to plot, by default 100
+    range_rings_sep : int, optional
+        Distance between range rings, by default 25
     outdir : pathlib.Path , optional
         Output path, by default Path(".")
     ext : str, optional
@@ -113,12 +116,13 @@ def plot_ppi_fig(
             ax=None,
             ticks=cbar_ticks,
         )
-        cbar.set_label(label=utils.COLORBAR_TITLES[qty], weight="bold")
+        cbar.set_label(label=utils.COLORBAR_TITLES[qty])
 
         if qty == "HCLASS":
             utils.set_HCLASS_cbar(cbar)
 
-            # Set 0-values as nan to prevent them from being plotted with same color as 1
+            # Set 0-values as nan to prevent them from being
+            # plotted with same color as 1
             radar.fields["radar_echo_classification"]["data"].set_fill_value(np.nan)
 
             radar.fields["radar_echo_classification"]["data"] = np.ma.masked_values(
@@ -148,35 +152,33 @@ def plot_ppi_fig(
                     zorder=20,
                 )
 
-        for r in [25, 50, 75, 100, 125, 150, 175, 200, 225, 250]:
+        for r in np.arange(range_rings_sep, max_dist, range_rings_sep):
             display.plot_range_ring(r, ax=ax, lw=0.5, col="k")
-        # display.plot_grid_lines(ax=ax, col="grey", ls=":")
-        ax.set_title(utils.TITLES[qty], y=-0.08)
-
-    # x-axis
-    for ax in axes[1][:].flat:
-        ax.set_xlabel("Distance from radar (km)")
-        ax.set_title(ax.get_title(), y=-0.22)
-        ax.xaxis.set_major_formatter(fmt)
-
-    # y-axis
-    for ax in axes.flat[::2]:
-        ax.set_ylabel("Distance from radar (km)")
-        ax.yaxis.set_major_formatter(fmt)
+        ax.set_title(utils.TITLES[qty])
 
     for ax in axes.flat:
+        # x and y labels
+        ax.set_ylabel("Distance from radar (km)")
+        ax.yaxis.set_major_formatter(fmt)
+        ax.set_xlabel("Distance from radar (km)")
+        ax.xaxis.set_major_formatter(fmt)
+        ax.label_outer()
+
+        # Set limits
         ax.set_xlim([-max_dist, max_dist])
         ax.set_ylim([-max_dist, max_dist])
         ax.set_aspect(1)
         ax.grid(zorder=15, linestyle="-", linewidth=0.4)
+        ax.patch.set_facecolor("white")
 
     # Remove empty axes
     for ax in axes.flat[n_qtys:]:
         ax.remove()
 
     fig.suptitle(
-        f"{title_prefix}{time:%Y/%m/%d %H:%M} UTC {radar.fixed_angle['data'][0]:.1f}°",
-        y=1.02,
+        f"{title_prefix}{time:%Y/%m/%d %H:%M} "
+        f"UTC {radar.fixed_angle['data'][0]:.1f}°",
+        y=1.01,
     )
 
     fname = outdir / (
@@ -184,13 +186,7 @@ def plot_ppi_fig(
         f"{time:%Y%m%d%H%M%S}_{radar.fixed_angle['data'][0]:.1f}.{ext}"
     )
 
-    fig.savefig(
-        fname,
-        dpi=600,
-        bbox_inches="tight",
-        transparent=False,
-        facecolor="white",
-    )
+    fig.savefig(fname)
 
 
 if __name__ == "__main__":
@@ -222,6 +218,9 @@ if __name__ == "__main__":
         "--rmax", type=int, default=100, help="Maximum range in kilometers"
     )
     argparser.add_argument(
+        "--range-rings", type=int, default=25, help="Range rings separation in km"
+    )
+    argparser.add_argument(
         "--ncols", type=int, default=2, help="Number of columns in the figure"
     )
     argparser.add_argument(
@@ -233,7 +232,11 @@ if __name__ == "__main__":
     )
     args = argparser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    plt.style.use("presentation.mplstyle")
+
+    # Get style from environment variable
+    style = os.environ.get("MPLSTYLE")
+    if style is not None:
+        plt.style.use(style)
     pyart.load_config(os.environ.get("PYART_CONFIG"))
 
     outdir = Path(args.out)
@@ -252,6 +255,7 @@ if __name__ == "__main__":
         args.qtys,
         ncols=args.ncols,
         max_dist=args.rmax,
+        range_rings_sep=args.range_rings,
         outdir=outdir,
         markers=markers,
         ext=args.ext,

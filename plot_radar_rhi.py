@@ -17,7 +17,38 @@ warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
-def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png", hmax=10):
+def plot_rhi_fig(
+    radar,
+    qtys,
+    ncols=2,
+    max_dist=100,
+    range_rings_sep=25,
+    outdir=Path("."),
+    ext="png",
+    hmax=10,
+):
+    """Plot a RHI figure.
+
+    Parameters
+    ----------
+    radar : pyart.core.Radar
+        Radar object.
+    qtys : list
+        Quantities to plot.
+    ncols : int
+        Number of columns in figure.
+    max_dist : int
+        Maximum distance to plot in km.
+    range_rings_sep : int
+        Distance between range rings in km.
+    outdir : pathlib.Path
+        Output directory.
+    ext : str
+        Output image extension.
+    hmax : int
+        Maximum height for images in km.
+
+    """
     cbar_ax_kws = {
         "width": "3%",  # width = 5% of parent_bbox width
         "height": "100%",
@@ -26,19 +57,33 @@ def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png", h
         "borderpad": 0,
     }
 
+    n_qtys = len(qtys)
+    nrows = np.ceil(n_qtys / ncols).astype(int)
+
     fig, axes = plt.subplots(
-        nrows=2, ncols=2, figsize=(15, 10), sharex="col", sharey="row"
+        nrows=nrows,
+        ncols=ncols,
+        figsize=(ncols * 7, 5 * nrows),
+        sharex="col",
+        sharey="row",
+        constrained_layout=True,
     )
     display = pyart.graph.RadarDisplay(radar)
     time = datetime.strptime(radar.time["units"], "seconds since %Y-%m-%dT%H:%M:%SZ")
     fmt = mpl.ticker.StrMethodFormatter("{x:.0f}")
+
     for ax, qty in zip(axes.flat, qtys):
         cax = inset_axes(ax, bbox_transform=ax.transAxes, **cbar_ax_kws)
 
+        if "VRAD" in qty:
+            utils.QTY_RANGES[qty] = (
+                -1 * np.ceil(radar.get_nyquist_vel(0)),
+                np.ceil(radar.get_nyquist_vel(0)),
+            )
+
         cmap, norm = utils.get_colormap(qty)
-        # if norm is None:
-        #     norm = mpl.colors.Normalize(vmin=qty_ranges[qty][0], vmax=qty_ranges[qty][1])
         cbar_ticks = None
+
         if norm is None:
             # define the bins and normalize
             bounds = np.linspace(utils.QTY_RANGES[qty][0], utils.QTY_RANGES[qty][1], 40)
@@ -46,19 +91,6 @@ def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png", h
             cmap = plt.get_cmap(cmap, len(bounds))
         elif isinstance(norm, mpl.colors.BoundaryNorm):
             cbar_ticks = norm.boundaries
-
-        display.plot(
-            utils.PYART_FIELDS[qty],
-            0,
-            title="",
-            # vmin=qty_ranges[qty][0], vmax=qty_ranges[qty][1],
-            ax=ax,
-            axislabels_flag=False,
-            colorbar_flag=False,
-            cmap=cmap,
-            norm=norm,
-            zorder=10,
-        )
 
         cbar = plt.colorbar(
             mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
@@ -68,37 +100,50 @@ def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png", h
             ax=None,
             ticks=cbar_ticks,
         )
-        cbar.set_label(label=utils.COLORBAR_TITLES[qty], weight="bold")
+        cbar.set_label(label=utils.COLORBAR_TITLES[qty])
 
         if qty == "HCLASS":
             utils.set_HCLASS_cbar(cbar)
-        # display.plot_colorbar(
-        #     mappable=mpl.cm.ScalarMappable(norm=norm, cmap=cmap), field=None, label=colorbar_titles[qty],
-        #     orient='vertical', cax=cax, ax=None, fig=fig, ticks=None, ticklabs=None)
-        display.plot_range_ring(250, ax=ax, lw=0.5, col="k")
-        # display.plot_grid_lines(ax=ax, col="grey", ls=":")
-        ax.set_title(utils.TITLES[qty], y=-0.12)
 
-    # x-axis
-    for ax in axes[1][:].flat:
+            # Set 0-values as nan to prevent them from
+            # being plotted with same color as 1
+            radar.fields["radar_echo_classification"]["data"].set_fill_value(np.nan)
+
+            radar.fields["radar_echo_classification"]["data"] = np.ma.masked_values(
+                radar.fields["radar_echo_classification"]["data"], 0
+            )
+
+        display.plot(
+            utils.PYART_FIELDS[qty],
+            0,
+            title="",
+            ax=ax,
+            axislabels_flag=False,
+            colorbar_flag=False,
+            cmap=cmap,
+            norm=norm,
+            zorder=10,
+        )
+
+        for r in np.arange(range_rings_sep, max_dist, range_rings_sep):
+            display.plot_range_ring(r, ax=ax, lw=0.5, col="k")
+        ax.set_title(utils.TITLES[qty])
+
+    for ax in axes.flat:
         ax.set_xlabel("Distance from radar (km)")
-        ax.set_title(ax.get_title(), y=-0.22)
         ax.xaxis.set_major_formatter(fmt)
 
-    # y-axis
-    for ax in axes.flat[::2]:
         ax.set_ylabel("Altitude from radar (km)")
         ax.yaxis.set_major_formatter(fmt)
 
-    for ax in axes.flat:
+        ax.label_outer()
+
         ax.set_ylim([0, hmax])
         ax.set_xlim([0, max_dist])
-        # ax.set_aspect(1)
         ax.grid(zorder=15, linestyle="-", linewidth=0.3)
 
-    # title = display.generate_title(field="reflectivity", sweep=0).split("\n")[0]
     fig.suptitle(
-        f"{time:%Y/%m/%d %H:%M} UTC {radar.fixed_angle['data'][0]:.1f}°", y=0.02
+        f"{time:%Y/%m/%d %H:%M} UTC {radar.fixed_angle['data'][0]:.1f}°", y=0.92
     )
 
     fname = outdir / (
@@ -107,14 +152,7 @@ def plot_fourpanel_fig(radar, qtys, max_dist=100, outdir=Path("."), ext="png", h
     )
 
     fig.subplots_adjust(wspace=0.2, hspace=0.2)
-    fig.savefig(
-        fname,
-        dpi=600,
-        # bbox_inches="tight",
-        transparent=False,
-        facecolor="white",
-    )
-    # fig.savefig(f"radar_vars_{time:%Y%m%d%H%M}_{radar.fixed_angle['data'][0]:.1f}.png", dpi=600, bbox_inches="tight")
+    fig.savefig(fname)
 
 
 if __name__ == "__main__":
@@ -139,6 +177,12 @@ if __name__ == "__main__":
         "--rmax", type=int, default=100, help="Maximum range in kilometers"
     )
     argparser.add_argument(
+        "--range-rings", type=int, default=25, help="Range rings separation in km"
+    )
+    argparser.add_argument(
+        "--ncols", type=int, default=2, help="Number of columns in the figure"
+    )
+    argparser.add_argument(
         "--ext",
         type=str,
         default="png",
@@ -150,11 +194,12 @@ if __name__ == "__main__":
     )
     args = argparser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    plt.style.use("presentation.mplstyle")
-    pyart.load_config(os.environ.get("PYART_CONFIG"))
 
-    if len(args.qtys) != 4:
-        raise ValueError("Wrong number of quantities, 4 expected!")
+    # Get style from environment variable
+    style = os.environ.get("MPLSTYLE")
+    if style is not None:
+        plt.style.use(style)
+    pyart.load_config(os.environ.get("PYART_CONFIG"))
 
     outdir = Path(args.out)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -163,6 +208,12 @@ if __name__ == "__main__":
 
     radar = pyart.io.read_sigmet(infile)
 
-    plot_fourpanel_fig(
-        radar, args.qtys, max_dist=args.rmax, outdir=outdir, hmax=args.hmax
+    plot_rhi_fig(
+        radar,
+        args.qtys,
+        ncols=args.ncols,
+        max_dist=args.rmax,
+        range_rings_sep=args.range_rings,
+        outdir=outdir,
+        hmax=args.hmax,
     )
