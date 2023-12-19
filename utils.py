@@ -276,7 +276,7 @@ def set_HCLASS_cbar(cbar):
         "6 Hail",
     ]
     values = np.arange(1, 7)
-    cbar.set_ticks(values, labels)
+    cbar.set_ticks(values)
     cbar.set_ticklabels(labels)
     plt.setp(
         cbar.ax.get_yticklabels(),

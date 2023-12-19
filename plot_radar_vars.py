@@ -34,6 +34,7 @@ def plot_ppi_fig(
     ext="png",
     markers=None,
     title_prefix="",
+    extent=None,
 ):
     """Plot a figure of 4 radar variables.
 
@@ -57,6 +58,8 @@ def plot_ppi_fig(
         List of marker tuples as (lon, lat, marker_color, marker_symbol), by default None
     title_prefix : str, optional
         Prefix to add to the figure title, by default ""
+    extent : list, optional
+        Extent of the plot in km from radar location, as xmin xmax ymin ymax, by default None
 
     """
     cbar_ax_kws = {
@@ -152,7 +155,7 @@ def plot_ppi_fig(
                     zorder=20,
                 )
 
-        for r in np.arange(range_rings_sep, max_dist, range_rings_sep):
+        for r in np.arange(range_rings_sep, 500, range_rings_sep):
             display.plot_range_ring(r, ax=ax, lw=0.5, col="k")
         ax.set_title(utils.TITLES[qty])
 
@@ -165,8 +168,12 @@ def plot_ppi_fig(
         ax.label_outer()
 
         # Set limits
-        ax.set_xlim([-max_dist, max_dist])
-        ax.set_ylim([-max_dist, max_dist])
+        if extent is not None:
+            ax.set_xlim([extent[0], extent[1]])
+            ax.set_ylim([extent[2], extent[3]])
+        else:
+            ax.set_xlim([-max_dist, max_dist])
+            ax.set_ylim([-max_dist, max_dist])
         ax.set_aspect(1)
         ax.grid(zorder=15, linestyle="-", linewidth=0.4)
         ax.patch.set_facecolor("white")
@@ -178,7 +185,7 @@ def plot_ppi_fig(
     fig.suptitle(
         f"{title_prefix}{time:%Y/%m/%d %H:%M} "
         f"UTC {radar.fixed_angle['data'][0]:.1f}°",
-        y=1.01,
+        y=1.015,
     )
 
     fname = outdir / (
@@ -186,7 +193,7 @@ def plot_ppi_fig(
         f"{time:%Y%m%d%H%M%S}_{radar.fixed_angle['data'][0]:.1f}.{ext}"
     )
 
-    fig.savefig(fname)
+    fig.savefig(fname, bbox_inches="tight")
 
 
 if __name__ == "__main__":
@@ -222,6 +229,9 @@ if __name__ == "__main__":
     )
     argparser.add_argument(
         "--ncols", type=int, default=2, help="Number of columns in the figure"
+    )
+    argparser.add_argument(
+        "--extent", type=float, nargs=4, help="Extent of the plot in km from radar location, as xmin xmax ymin ymax"
     )
     argparser.add_argument(
         "--ext",
@@ -260,4 +270,5 @@ if __name__ == "__main__":
         markers=markers,
         ext=args.ext,
         title_prefix=f"{radar.metadata['instrument_name'].decode().capitalize()} ",
+        extent=args.extent,
     )
