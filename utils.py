@@ -1,9 +1,12 @@
 """Utility functions."""
+
 import os
 import re
 import struct
 from datetime import datetime
+from PIL import Image
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -18,6 +21,7 @@ alias_names = {
         "radial_wind_speed",
         "corrected_velocity",
         "VRADDH",
+        "VRADH",
     ],
     "DBZH": [
         "reflectivity",
@@ -29,6 +33,7 @@ alias_names = {
     ],
     "total_shear": ["total_shear_thr", "tdwr_gfda_shear"],
     "ZDR": ["corrected_differential_reflectivity", "ZDRC"],
+    "RHOHV": ["uncorrected_cross_correlation_ratio"],
 }
 
 
@@ -50,6 +55,45 @@ PYART_FIELDS = {
     "LOG": "log_signal_to_noise_ratio",
     "PMI": "polarimetric_meteo_index",
     "CSP": "clutter_power_ratio",
+    "DBZV": "reflectivity_vv",
+}
+
+PYART_FIELDS_MCH = {
+    "DBZH": "reflectivity",
+    "DBZHC": "corrected_reflectivity",
+    "HCLASS": "radar_echo_classification",
+    "KDP": "specific_differential_phase",
+    "PHIDP": "uncorrected_differential_phase",
+    "RHOHV": "uncorrected_cross_correlation_ratio",
+    "SQI": "normalized_coherent_power",
+    "TH": "reflectivity_hh_clut",
+    "VRAD": "velocity",
+    "VRADDH": "corrected_velocity",
+    "WRAD": "spectrum_width",
+    "ZDR": "differential_reflectivity",
+    "ZDRC": "corrected_differential_reflectivity",
+    "SNR": "signal_to_noise_ratio",
+    "LOG": "log_signal_to_noise_ratio",
+    "PMI": "polarimetric_meteo_index",
+    "CSP": "clutter_power_ratio",
+    "DBZV": "reflectivity_vv",
+}
+
+METRANET_FIELD_NAMES = {
+    "WID": "spectrum_width",
+    "VEL": "velocity",
+    "ZH": "reflectivity",
+    "ZV": "reflectivity_vv",  # non standard name
+    "ZDR": "differential_reflectivity",
+    "RHO": "uncorrected_cross_correlation_ratio",
+    "PHI": "uncorrected_differential_phase",
+    "ST1": "stat_test_lag1",  # statistical test on lag 1 (non standard name)
+    "ST2": "stat_test_lag2",  # statistical test on lag 2 (non standard name)
+    "WBN": "wide_band_noise",  # (non standard name)
+    "MPH": "mean_phase",  # (non standard name)
+    "CLT": "clutter_exit_code",  # (non standard name)
+    "ZHC": "reflectivity_hh_clut",  # cluttered horizontal reflectivity
+    "ZVC": "reflectivity_vv_clut",  # cluttered vertical reflectivity
 }
 
 PYART_FIELDS_ODIM = {
@@ -75,6 +119,7 @@ PYART_FIELDS_ODIM = {
 QTY_FORMATS = {
     # "reflectivity": "{x:.0f}",
     "DBZH": "{x:.0f}",
+    "DBZV": "{x:.0f}",
     "VRAD": "{x:.0f}",
     "VRADH": "{x:.0f}",
     # "radial_wind_speed": "{x:.0f}",
@@ -103,8 +148,9 @@ QTY_FORMATS = {
 
 QTY_RANGES = {
     "DBZH": (-15.0, 60.0),
+    "DBZV": (-15.0, 60.0),
     "HCLASS": (1.0, 6.0),
-    "KDP": (-4.0, 8.0),
+    "KDP": (-2.5, 7.5),
     "PHIDP": (0, 360.0),
     "RHOHV": (0.8, 1.0),
     "SQI": (0.0, 1.0),
@@ -113,7 +159,7 @@ QTY_RANGES = {
     "VRADH": (-30.0, 30.0),
     # "radial_wind_speed": (-30.0, 30.0),
     "WRAD": (0.0, 5.0),
-    "ZDR": (-4, 5.0),
+    "ZDR": (-2, 6.0),
     "SNR": (-30.0, 50.0),
     "LOG": (0.0, 50.0),
     "cnr": (-30, 0),
@@ -130,6 +176,8 @@ QTY_RANGES = {
 COLORBAR_TITLES = {
     # "reflectivity": "Equivalent reflectivity factor [dBZ]",
     "DBZH": "Equivalent reflectivity factor [dBZ]",
+    "DBZV": "Equivalent reflectivity factor (V) [dBZ]",
+    # "DBZH": "Tutkaheijastavuus [dBZ]",
     "HCLASS": "HydroClass",
     "KDP": "Specific differential phase [°/km]",
     "PHIDP": "Differential phase [°]",
@@ -157,6 +205,7 @@ COLORBAR_TITLES = {
 
 TITLES = {
     "DBZH": r"$Z_{e}$",
+    "DBZV": r"$Z_{e}$",
     "DBZHC": r"Corrected $Z_{e}$",
     "VRAD": r"$v$",
     "RHOHV": r"$\rho{HV}$",
@@ -191,18 +240,36 @@ for name, alias_list in alias_names.items():
             TITLES[a] = TITLES[name]
 
 
+def convert_colorspace(filepath):
+    """Convert colorspace of a file.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the file to convert.
+
+    Returns
+    -------
+    None
+        The function modifies the file in place.
+
+    """
+    # Open the file
+    im = Image.open(filepath)
+    im = im.convert("P", palette=Image.Palette.ADAPTIVE)
+    im.save(filepath)
+
+
 def get_colormap(quantity):
     if quantity == "HCLASS":
-        cmap = colors.ListedColormap(
-            ["peru", "dodgerblue", "blue", "cyan", "yellow", "red"]
-        )
+        cmap = colors.ListedColormap(["peru", "dodgerblue", "blue", "cyan", "yellow", "red"])
         norm = colors.BoundaryNorm(np.arange(0.5, 7.5), cmap.N)
     elif "VRAD" in quantity or quantity in alias_names["VRAD"]:
         # cmap = "pyart_BuDRd18"
         # cmap = cm_crameri.roma
         cmap = "cmc.roma_r"
         norm = None
-    elif quantity in ["DBZH", *alias_names["DBZH"]]:
+    elif quantity in ["DBZH", *alias_names["DBZH"], "DBZV"]:
         bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 1, 5)
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
         cmap = cm.get_cmap("pyart_HomeyerRainbow", len(bounds))
@@ -215,8 +282,10 @@ def get_colormap(quantity):
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
         cmap = cm.get_cmap("pyart_HomeyerRainbow", len(bounds))
     elif quantity == "KDP":
-        cmap = "pyart_Theodore16"
-        norm = None
+        bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.01, 0.5)
+        norm = mpl.colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
+        cmap = cm.get_cmap("pyart_Theodore16", len(bounds))
+        ticks = np.arange(np.ceil(QTY_RANGES[quantity][0]), QTY_RANGES[quantity][1] + 0.01, 1.0)
     elif quantity == "PHIDP":
         cmap = "pyart_Wild25"
         norm = None
@@ -228,23 +297,41 @@ def get_colormap(quantity):
         cmap = "pyart_NWS_SPW"
         norm = None
     elif quantity == "ZDR":
-        bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.1, 0.5)
+        # bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.1, 0.5)
+        # norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
+        # cmap = cm.get_cmap("pyart_LangRainbow12", len(bounds))
+
+        cmap_upper = "pyart_HomeyerRainbow"
+        cmap_lower = "cmc.grayC"
+
+        vcenter = 0.0
+        bounds_lower = np.arange(QTY_RANGES[quantity][0], vcenter, 0.5)
+        bounds_upper = np.arange(vcenter, QTY_RANGES[quantity][1] + 0.1, 0.5)
+        bounds = np.concatenate((bounds_lower, bounds_upper))
+        # norm = mpl.colors.TwoSlopeNorm(vmin=QTY_RANGES[quantity][0], vcenter=0, vmax=QTY_RANGES[quantity][1])
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
-        cmap = cm.get_cmap("pyart_LangRainbow12", len(bounds))
+
+        colors_lower = plt.cm.get_cmap(cmap_lower)(np.linspace(0.25, 0.75, len(bounds_lower)))
+        colors_upper = plt.cm.get_cmap(cmap_upper)(np.linspace(0.35, 0.95, len(bounds_upper)))
+
+        # Set alpha
+        # colors_lower[:, -1] = 0.6
+
+        all_colors = np.vstack((colors_lower, colors_upper))
+        cmap = mpl.colors.LinearSegmentedColormap.from_list("zdr_twoslope", all_colors, N=len(bounds))
+
+        ticks = bounds[::2]
+
     elif quantity == "cnr":
         bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.1, 1.0)
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
         cmap = cm.get_cmap("viridis", len(bounds))
     elif quantity == "PMI":
-        bounds = np.arange(
-            QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.01, 0.05
-        )
+        bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.01, 0.05)
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
         cmap = cm.get_cmap("cmc.hawaii", len(bounds))
     elif quantity == "SQI":
-        bounds = np.arange(
-            QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.01, 0.05
-        )
+        bounds = np.arange(QTY_RANGES[quantity][0], QTY_RANGES[quantity][1] + 0.01, 0.05)
         norm = colors.BoundaryNorm(boundaries=bounds, ncolors=len(bounds))
         cmap = cm.get_cmap("cmc.hawaii", len(bounds))
     elif quantity in ["wind_shear", *alias_names["wind_shear"]]:
@@ -285,9 +372,7 @@ def set_HCLASS_cbar(cbar):
     )
 
 
-def get_sigmet_file_list_by_task(
-    path, file_regex="WRS([0-9]{12}).RAW([A-Z0-9]{4})", task_name=None
-):
+def get_sigmet_file_list_by_task(path, file_regex="WRS([0-9]{12}).RAW([A-Z0-9]{4})", task_name=None):
     """Generate a list of files by task.
 
     Parameters
@@ -311,7 +396,7 @@ def get_sigmet_file_list_by_task(
 
     data = []
 
-    for (root, dirs, files) in os.walk(fullpath):
+    for root, dirs, files in os.walk(fullpath):
         addpath = root.replace(fullpath, "")
 
         for f in files:
@@ -323,11 +408,7 @@ def get_sigmet_file_list_by_task(
             try:
                 # Get task name from headers
                 sf = pyart.io.sigmet.SigmetFile(os.path.join(root, f))
-                task = (
-                    sf.product_hdr["product_configuration"]["task_name"]
-                    .decode()
-                    .strip()
-                )
+                task = sf.product_hdr["product_configuration"]["task_name"].decode().strip()
                 sf.close()
                 if task_name is not None and task != task_name:
                     continue
@@ -360,12 +441,7 @@ def add_estimated_SNR(fn, radar):
     sigmet_file = SigmetFile(fn)
 
     # Get reflectivity calibration value
-    NEZ = (
-        sigmet_file.ingest_header["task_configuration"]["task_calib_info"][
-            "reflectivity_calibration"
-        ]
-        / 16
-    )
+    NEZ = sigmet_file.ingest_header["task_configuration"]["task_calib_info"]["reflectivity_calibration"] / 16
     # Ranges in the same shape as data
     R = np.tile(radar.range["data"], (radar.nrays, 1)) * 1e-3
     # Estimated SNR

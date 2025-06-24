@@ -1,6 +1,7 @@
-name: radar
+name: base
 channels:
   - conda-forge
+  - nodefaults
 dependencies:
   - numpy
   - arm_pyart

@@ -1,0 +1,23 @@
+version: "3"
+
+services:
+  radar-app:
+    user: "4584:5600"
+    build: .
+    volumes:
+      # For keeping the shell history
+      # - shell_history:/root/hist
+      - $HOME/.docker_bash_history:/home/ritvanen/.bash_history
+      # IPython history
+      - $HOME/.ipython/profile_default/:/home/ritvanen/.ipython/profile_default/
+      # Python history
+      - $HOME/.python_history:/home/ritvanen/.python_history
+      - .:/code
+      - /arch/radarraw:/arch/radarraw
+      # - results:/code/results
+    working_dir: /code
+    stdin_open: true # docker run -i
+    tty: true # docker run -t
+    environment:
+      HISTFILE: /home/ritvanen/.bash_history
+      PYART_CONFIG: /code/.pyart_config.py
